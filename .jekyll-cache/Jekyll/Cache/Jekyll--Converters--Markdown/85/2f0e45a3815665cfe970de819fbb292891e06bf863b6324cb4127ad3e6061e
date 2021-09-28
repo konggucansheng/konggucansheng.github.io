@@ -1,0 +1,18 @@
+I"�<p>这周收到一个 sentry 报警，如下 SQL 查询超时了。</p>
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>select * from order_info where uid = 5837661 order by id asc limit 1
+</code></pre></div></div>
+<p>执行show create table order_info 发现这个表其实是有加索引的</p>
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>CREATE TABLE `order_info` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `uid` int(11) unsigned,
+  `order_status` tinyint(3) DEFAULT NULL,
+  ... 省略其它字段和索引
+  PRIMARY KEY (`id`),
+  KEY `idx_uid_stat` (`uid`,`order_status`),
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+</code></pre></div></div>
+<p>理论上执行上述 SQL 会命中 idx_uid_stat 这个索引，但实际执行 explain 查看</p>
+<div class="highlighter-rouge"><div class="highlight"><pre class="highlight"><code>explain select * from order_info where uid = 5837661 order by id asc limit 1
+</code></pre></div></div>
+<p>可以看到它的 possible_keys（此 SQL 可能涉及到的索引） 是 idx_uid_stat，但实际上（key）用的却是全表扫描</p>
+:ET

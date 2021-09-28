@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="baidu-site-verification" content="3aFsC6yMzO" />
+    <meta name="baidu-site-verification" content="80tFOKdiVN" />
+    <!-- Favicon Icon -->
+    <!-- <link rel="shortcut icon" type="image/x-icon" href="/assets/images/"> -->
+
+    <title>空谷残声</title>
+    <meta name="keywords" content="空谷残声,Golang,Go后端">
+    <meta name="description"
+          content="本站为空谷残声的个人博客，内容为本人Golang学习成长的经历。">
+
+    <link rel="canonical" href="http://localhost:4000/">
+    <link rel="alternate" type="application/rss+xml" title="空谷残声" href="http://localhost:4000">
+
+    <!-- Third-Party CSS -->
+    <link href="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/3.3.7/css/bootstrap.min.css" rel="stylesheet">
+
+    <link rel="stylesheet" href="/bower_components/octicons/octicons/octicons.css">
+    <link rel="stylesheet" href="/bower_components/hover/css/hover-min.css">
+    <link rel="stylesheet" href="/bower_components/primer-markdown/dist/user-content.min.css">
+    <link rel="stylesheet" href="/assets/css/syntax.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.css">
+
+    
+
+    <!-- My CSS -->
+    <link rel="stylesheet" href="/assets/css/common.css">
+
+    <!-- CSS set in page -->
+    
+    <link rel="stylesheet" href="/assets/css/index.css">
+    
+    <link rel="stylesheet" href="/assets/css/sidebar-popular-repo.css">
+    
+
+    <link href="https://cdn.bootcdn.net/ajax/libs/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet">
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/2.2.4/jquery.min.js"></script>
+    <script src="https://cdn.bootcdn.net/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js"></script>
+
+</head>
+
+
+    <body>
+
+    <header class="site-header">
+    <div class="site-header-topbar">
+        <div class="container">
+            <div class="topbar-menu">
+                
+            </div>
+        </div>
+    </div>
+    <div class="container">
+        <a id="site-header-brand" href="/" title="空谷残声">
+            <span class="octicon octicon-smiley"></span>
+            空谷残声
+        </a>
+        <nav class="site-header-nav" role="navigation">
+            
+            <div class=" site-header-nav-item hvr-underline-from-center">
+                <a href="/"
+                   target=""
+                   title="Home">
+                    Home
+                </a>
+                
+            </div>
+            
+            <div class=" site-header-nav-item hvr-underline-from-center">
+                <a href="/go.html"
+                   target="_self"
+                   title="Go">
+                    Go
+                </a>
+                
+            </div>
+            
+        </nav>
+    </div>
+</header>
+
+
+        <div class="content">
+            <section class="jumbotron">
+    <div class="container">
+        <h1>「空谷残声」Golang成长之路</h1>
+        <div id="jumbotron-meta-info">
+             
+                <span class="meta-info-index hvr-grow">
+                    <a href="/open-source.html" title="Go" target="_blank">Go</a>
+                </span>
+            
+        </div>
+    </div>
+</section>
+<section class="content container">
+
+    <div class="row">
+
+        <!-- Post List -->
+        <div class="col-md-8">
+
+            <ol class="post-list">
+                
+                 
+                    <li class="post-list-item">
+                        <h2 class="post-list-title">
+                            <a class="hvr-underline-from-center" href="/go/2021/09/28/mysqlbug.html">Mysql bug</a>
+                        </h2>
+                        <p class="post-list-description">
+                            这周收到一个 sentry 报警，如下 SQL 查询超时了。
+select * from order_info where uid = 5837661 order by id asc limit 1
+
+执行show create table order_info 发现这个表其实是有加索引的
+CREATE TABLE `order_info` (
+  `id` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `uid` int(11) unsigned,
+  `order_status` tinyint(3) DEFAULT NULL,
+  ... 省略其它字段和索引
+  PRIMARY KEY (`id`),
+  KEY `idx_uid_stat` (`uid`,`order_status`),
+) ENGINE=InnoDB DEFAULT CHARSET=utf8
+
+理论上执行上述 SQL 会命中 idx_uid_stat 这个索引，但实际执行 explain 查看
+explain select * from order_info where uid = 5837661 order by id asc limit 1
+
+可以看到它的 possible_keys（此 SQL 可能涉及到的索引） 是 idx_uid_stat，但实际上（key）用的却是全表扫描
+                        </p>
+                        <p class="post-list-meta">
+                            <span class="octicon octicon-calendar"></span> 2021/09/28
+                        </p>
+                    </li>
+                  
+                
+                 
+                    <li class="post-list-item">
+                        <h2 class="post-list-title">
+                            <a class="hvr-underline-from-center" href="/go/2021/09/23/tcplink.html">Tcp 3次握手</a>
+                        </h2>
+                        <p class="post-list-description">
+                            在后端相关岗位的入职面试中，三次握手的出场频率非常的高，甚至说它是必考题也不为过。一般的答案都是说客户端如何发起 SYN 握手进入 SYN_SENT 状态，服务器响应 SYN 并回复 SYNACK，然后进入 SYN_RECV，…… , 吧啦吧啦诸如此类。
+但我今天想给出一份不一样的答案。其实三次握手在内核的实现中，并不只是简单的状态的流转，还包括半连接队列、syncookie、全连接队列、重传计时器等关键操作。如果能深刻理解这些，你对线上把握和理解将更进一步。如果有面试官问起你三次握手，相信这份答案一定能帮你在面试官面前赢得非常多的加分。
+在基于 TCP 的服务开发中，三次握手的主要流程图如下。 
+
+服务器中的核心代码是创建 socket，绑定端口，listen 监听，最后 accept 接收客户端的请求。
+//服务端核心代码
+int main(int argc, char const *argv[])
+{
+ int fd = socket(AF_INET, SOCK_STREAM, 0);
+ bind(fd, ...);
+ listen(fd, 128);
+ accept(fd, ...);
+ ...
+}
+
+客户端的相关代码是创建 socket，然后调用 connect 连接 server。
+//客户端核心代码
+int main(){
+ fd = socket(AF_INET,SOCK_STREAM, 0);
+ connect(fd, ...);
+ ...
+}
+
+围绕这个三次握手图，以及客户端，服务端的核心代码，我们来深度探索一下三次握手过程中的内部操作。我们从和三次握手过程关系比较大的 listen 讲起！
+友情提示：本文中内核源码会比较多。如果你能理解的了更好，如果觉得理解起来有困难，那直接重点看本文中的描述性的文字，尤其是加粗部分的即可。另外文章最后有一张总结图归纳和整理了全文内容。
+一、服务器的 listen
+                        </p>
+                        <p class="post-list-meta">
+                            <span class="octicon octicon-calendar"></span> 2021/09/23
+                        </p>
+                    </li>
+                  
+                
+                 
+                    <li class="post-list-item">
+                        <h2 class="post-list-title">
+                            <a class="hvr-underline-from-center" href="/go/2021/08/06/firstgo.html">Go scp协议处理</a>
+                        </h2>
+                        <p class="post-list-description">
+                            ```go
+package sserver
+                        </p>
+                        <p class="post-list-meta">
+                            <span class="octicon octicon-calendar"></span> 2021/08/06
+                        </p>
+                    </li>
+                  
+                
+            </ol>
+
+            <!-- Pagination -->
+            
+
+
+        </div>
+
+        <div class="col-md-4">
+            
+<h3 class="sidebar-title">精选文章</h3>
+
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="Go 系列文章">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="/go.html" target="_blank">Go 系列文章</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text">Go基础</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+<br/>
+
+
+
+<h3 class="sidebar-title">GitHub 仓库</h3>
+
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="week3">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/week3" target="_blank">week3</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text"></p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2021-08-01 15:18:42 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2021-08-01 15:18:42 UTC" title="2021-08-01 15:18:42 UTC">2021-08-01</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="week2">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/week2" target="_blank">week2</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text">week2</p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2021-07-25 15:52:28 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2021-07-25 15:52:28 UTC" title="2021-07-25 15:52:28 UTC">2021-07-25</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="swoole-src">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/swoole-src" target="_blank">swoole-src</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text">Event-driven asynchronous & concurrent networking engine with high performance for PHP.</p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2016-11-01 09:06:09 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2016-11-01 09:06:09 UTC" title="2016-11-01 09:06:09 UTC">2016-11-01</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="sftp">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/sftp" target="_blank">sftp</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text">SFTP support for the go.crypto/ssh package</p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2021-05-24 03:47:06 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2021-05-24 03:47:06 UTC" title="2021-05-24 03:47:06 UTC">2021-05-24</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="my-first-github">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/my-first-github" target="_blank">my-first-github</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text">this is my first github</p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2015-05-06 07:20:58 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2015-05-06 07:20:58 UTC" title="2015-05-06 07:20:58 UTC">2015-05-06</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card text-center">
+    <div class="thumbnail">
+        <div class="card-image geopattern" data-pattern-id="konggucansheng.github.io">
+            <div class="card-image-cell">
+                <h3 class="card-title">
+                    <a href="https://github.com/konggucansheng/konggucansheng.github.io" target="_blank">konggucansheng.github.io</a>
+                </h3>
+            </div>
+        </div>
+        <div class="caption">
+            <div class="card-description">
+                <p class="card-text"></p>
+            </div>
+            <div class="card-text">
+                <span data-toggle="tooltip" class="meta-info" title="0 stars">
+                    <span class="octicon octicon-star"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="0 forks">
+                    <span class="octicon octicon-git-branch"></span> 0
+                </span>
+                <span data-toggle="tooltip" class="meta-info" title="Last updated：2021-08-06 07:07:13 UTC">
+                    <span class="octicon octicon-clock"></span>
+                    <time datetime="2021-08-06 07:07:13 UTC" title="2021-08-06 07:07:13 UTC">2021-08-06</time>
+                </span>
+            </div>
+        </div>
+    </div>
+</div>
+
+
+
+<script>
+    $(document).ready(function(){
+
+        // Enable bootstrap tooltip
+        $("body").tooltip({ selector: '[data-toggle=tooltip]' });
+
+        $('.geopattern').each(function(){
+            $(this).geopattern($(this).data('pattern-id'));
+        });
+
+    });
+</script>
+        </div>
+
+    </div>
+
+</section>
+
+
+        </div>
+
+    
+<footer class="container">
+    <div class="site-footer">
+          <div class="card text-center">
+            <ul class="list-inline" style="margin-left: 0;">
+               <li>
+                <a target="_blank" href="https://github.com/konggucansheng">
+                  <span class="fa-stack fa-lg">
+                    <i class="fa fa-circle fa-stack-2x"></i>
+                    <i class="fa fa-github fa-stack-1x fa-inverse"></i>
+                  </span>
+                </a>
+              </li>
+          </ul>
+        </div>
+        <div class="site-footer-links mobile-hidden">
+            
+            <a href="/open-source.html" title="Go" target="_blank">Go</a>
+            
+        </div>
+<!--         <div class="site-footer-icons">
+               京ICP备15067287号-3
+        </div> -->
+        <div class="scrolltop">
+            <a href="javascript:window.scrollTo(0,0)" >TOP</a>
+        </div>
+        <div class="rss">
+            <a href="/feed.xml"><span class="octicon octicon-rss" style="color:orange;"></span></a>
+            Power by <a href="https://github.com/DONGChuan/Yummy-Jekyll">Yummy Jekyll</a>
+            <span id="busuanzi_container_site_pv">本站总访问量<span id="busuanzi_value_site_pv"></span>次</span>
+        </div>
+    </div>
+    <!-- Third-Party JS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/geopattern/1.2.3/js/geopattern.min.js"></script>
+
+    <script type="text/javascript" src="/assets/js/script.js"></script>
+    
+
+    <script src="https://cdn.jsdelivr.net/npm/gitalk@1/dist/gitalk.min.js"></script>
+    <script async src="//busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
+    
+     <!-- Cnzz Analytics -->
+       <div style="display:none">
+         <script type="text/javascript">var cnzz_protocol = (("https:" == document.location.protocol) ? "https://" : "http://");document.write(unescape("%3Cspan id='cnzz_stat_icon_1277973383'%3E%3C/span%3E%3Cscript src='" + cnzz_protocol + "s9.cnzz.com/z_stat.php%3Fid%3D1277973383' type='text/javascript'%3E%3C/script%3E"));</script>
+
+         <script type="text/javascript">var cnzz_protocol1 = (("https:" == document.location.protocol) ? "https://" : "http://");document.write(unescape("%3Cspan id='cnzz_stat_icon_1279239413'%3E%3C/span%3E%3Cscript src='" + cnzz_protocol1 + "s9.cnzz.com/z_stat.php%3Fid%3D1279239413' type='text/javascript'%3E%3C/script%3E"));</script>
+       </div>
+     <!-- Cnzz Analytics -->
+</footer>
+
+
+    </body>
+
+</html>

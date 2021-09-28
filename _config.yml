@@ -1,0 +1,168 @@
+# Welcome to Jekyll!
+#
+# This config file is meant for settings that affect your whole blog, values
+# which you are expected to set up once and rarely need to edit after that.
+# For technical reasons, this file is *NOT* reloaded automatically when you use
+# 'jekyll serve'. If you change this file, please restart the server process.
+
+# Site settings
+title:  空谷残声
+subtitle: 「空谷残声」Golang成长之路
+name: 空谷残声 
+email: 530017894@qq.com
+description: 本站为空谷残声的个人博客，内容为本人Golang学习成长的经历。
+keywords: 空谷残声,Golang,Go后端
+encoding: "utf-8"
+# favicon: favicon.ico 
+
+repository: konggucansheng/konggucansheng.github.io
+github_url: https://github.com/konggucansheng
+#url: https://www.konggucansheng.com
+#enforce_ssl: konggucansheng.com
+
+## Gem
+plugins:
+  - jekyll-paginate
+  - jekyll-geo-pattern
+  - rouge
+  - kramdown
+  - jekyll-github-metadata
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+lsi:         false
+excerpt_separator: "\n\n"
+
+source:      .
+destination: ./_site
+
+quiet:    false
+defaults: []
+
+kramdown:
+  input: GFM
+  enable_coderay: true
+  syntax_highlighter: rouge
+
+syntax_highlighter_opts:
+   coderay_line_numbers:  nil
+
+# Pagination
+paginate: 12
+paginate_path: 'page:num'
+
+# Navigation. top menu list
+# menus:
+
+#   -
+#     href: /zsxq.html
+#     label: 星球
+#     target: _self
+
+#   -
+#     href: /link.html
+#     label: 友链
+#     target: _self
+
+
+
+# Navigation. main menu list
+navs:
+
+  -
+    href: /
+    label: Home
+
+  -
+    href: /go.html
+    label: Go
+    target: _self
+
+  # -
+  #   href: /life.html
+  #   label: 程序人生
+  #   target: _self
+    
+  # -
+  #   href: /archives.html
+  #   label: Archives
+  #   target: _self
+
+  # -
+  #   href: /about.html
+  #   label: About
+  #   target: _self
+
+
+# labels. my blog key words
+labels:
+
+  -
+    href: /open-source.html
+    label: Go  
+    target: _blank
+
+
+# selected articles
+classes:
+
+  # -
+  #   href: /life.html
+  #   name: 程序人生
+  #   describe: 程序员的人生不止有代码
+
+
+  -
+    href: /go.html
+    name: Go 系列文章
+    describe: Go基础
+
+
+# ---------------- #
+#       RSS        #
+# ---------------- #
+subscribe_rss: /feed.xml
+
+# Sidebar to show popular repo
+side_bar_repo_limit: 6 # Number of repos to show
+
+# Google Analytics
+# analytics :
+# provider : google
+#   google :
+#     tracking_id : ''  # ex. UA-72165600-X
+
+
+# For about.html. Fell free to create your own!
+skill_software_keywords: [Go, MySQL, Oracle, Design Patterns]
+skill_j2ee_keywords: [Spring, Struct, Hibernet, MyBatis, JSP]
+skill_web_keywords: [HTML, CSS, JS, JQuery, Ajax, NodeJS, ExpressJS, MongoDB, Redis, PHP,  Boostrap]
+skill_mobile_app_keywords: [vuejs, hyhird app]
+
+
+# # ---------------- #
+# #      Comments    #
+# # ---------------- #
+# # support provider: disqus, gitment, gitalk
+# comments_provider: gitalk
+# # !!!重要!!! 请修改下面这些信息为你自己申请的
+# # !!!Important!!! Please modify infos below to yours
+# # https://disqus.com
+# disqus:
+#     username: qing_gee
+# # https://imsun.net/posts/gitment-introduction/
+# gitment:
+#     owner: qinggee
+#     repo: blog-comments
+#     oauth:
+#         client_id: 11a6f252374ff6224761
+#         client_secret: 3d1722301d3eb67900cfc3828d137c9ea50c00a7
+# # https://github.com/gitalk/gitalk#install
+# gitalk:
+#     owner: qinggee
+#     repo: blog-comments
+#     clientID: 11a6f252374ff6224761
+#     clientSecret: 3d1722301d3eb67900cfc3828d137c9ea50c00a7
+# # 在使用其它评论组件时可点击显示 Disqus
+# lazy_load_disqus : true

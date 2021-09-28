@@ -1,0 +1,217 @@
+I"�z<div class="language-go highlighter-rouge"><div class="highlight"><pre class="highlight"><code><span class="k">package</span> <span class="n">sserver</span>
+
+<span class="k">import</span> <span class="p">(</span>
+	<span class="s">"bytes"</span>
+	<span class="s">"fmt"</span>
+	<span class="s">"io"</span>
+	<span class="s">"net"</span>
+	<span class="s">"os"</span>
+	<span class="s">"strings"</span>
+
+	<span class="s">"ptd.golibs/cliserver/lib"</span>
+	<span class="s">"ptd.golibs/cliserver/tools"</span>
+
+	<span class="s">"github.com/sirupsen/logrus"</span>
+	<span class="s">"golang.org/x/crypto/ssh"</span>
+<span class="p">)</span>
+
+<span class="k">const</span> <span class="p">(</span>
+	<span class="n">MAX_BUFFER_SIZE</span> <span class="o">=</span> <span class="m">1024</span> <span class="o">*</span> <span class="m">1024</span>
+<span class="p">)</span>
+
+<span class="k">type</span> <span class="n">exitStatusMsg</span> <span class="k">struct</span> <span class="p">{</span>
+	<span class="n">Status</span> <span class="kt">uint32</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">handleExec</span><span class="p">(</span><span class="n">c</span> <span class="n">ssh</span><span class="o">.</span><span class="n">Channel</span><span class="p">,</span> <span class="n">r</span> <span class="o">*</span><span class="n">ssh</span><span class="o">.</span><span class="n">Request</span><span class="p">,</span> <span class="n">conn</span> <span class="n">net</span><span class="o">.</span><span class="n">Conn</span><span class="p">,</span> <span class="n">sConn</span> <span class="o">*</span><span class="n">ssh</span><span class="o">.</span><span class="n">ServerConn</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">defer</span> <span class="n">c</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+	<span class="n">user</span> <span class="o">:=</span> <span class="n">sConn</span><span class="o">.</span><span class="n">Permissions</span><span class="o">.</span><span class="n">Extensions</span><span class="p">[</span><span class="s">"user_name"</span><span class="p">]</span>
+	<span class="c">//r.Payload[4:]前4个字节表示字符串长度（不属于实际字符串），因此解析命令从第5个字节开始</span>
+	<span class="c">// filename, _, _ := parseCommand(r.Payload[4:], user)</span>
+	<span class="n">file</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"/files/%s"</span><span class="p">,</span> <span class="n">user</span><span class="p">)</span>
+	<span class="n">handleClient</span><span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">handleClient</span><span class="p">(</span><span class="n">conn</span> <span class="n">ssh</span><span class="o">.</span><span class="n">Channel</span><span class="p">,</span> <span class="n">file</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">defer</span> <span class="n">conn</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+
+	<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+	<span class="n">scpDir</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+<span class="p">}</span>
+<span class="k">func</span> <span class="n">scpDir</span><span class="p">(</span><span class="n">conn</span> <span class="n">ssh</span><span class="o">.</span><span class="n">Channel</span><span class="p">,</span> <span class="n">file</span> <span class="kt">string</span><span class="p">,</span> <span class="n">prefile</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">buf</span> <span class="p">[</span><span class="n">MAX_BUFFER_SIZE</span><span class="p">]</span><span class="kt">byte</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">1</span><span class="p">])</span>
+		<span class="n">fmt</span><span class="o">.</span><span class="n">Println</span><span class="p">(</span><span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]))</span>
+		<span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">])</span> <span class="o">==</span> <span class="s">"D"</span> <span class="p">{</span>
+			<span class="k">var</span> <span class="n">filesize</span> <span class="kt">int</span>
+			<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">5</span><span class="p">])</span>
+			<span class="k">for</span> <span class="p">{</span>
+				<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">1</span><span class="p">])</span>
+				<span class="k">if</span> <span class="kt">int</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="m">0</span> <span class="p">{</span>
+					<span class="k">break</span>
+				<span class="p">}</span>
+				<span class="k">if</span> <span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">' '</span> <span class="p">{</span>
+					<span class="k">break</span>
+				<span class="p">}</span>
+				<span class="n">filesize</span> <span class="o">=</span> <span class="n">filesize</span><span class="o">*</span><span class="m">10</span> <span class="o">+</span> <span class="kt">int</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">-</span><span class="sc">'0'</span><span class="p">)</span>
+			<span class="p">}</span>
+			<span class="k">var</span> <span class="n">realfile</span> <span class="kt">string</span>
+			<span class="n">count</span> <span class="o">:=</span> <span class="m">1</span>
+			<span class="k">for</span> <span class="p">{</span>
+				<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">count</span> <span class="o">:</span> <span class="n">count</span><span class="o">+</span><span class="m">1</span><span class="p">])</span>
+				<span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">count</span><span class="o">:</span><span class="n">count</span><span class="o">+</span><span class="m">1</span><span class="p">])</span> <span class="o">==</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span> <span class="p">{</span>
+					<span class="n">realfile</span> <span class="o">=</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="n">count</span><span class="p">])</span>
+					<span class="k">break</span>
+				<span class="p">}</span>
+				<span class="n">count</span><span class="o">++</span>
+			<span class="p">}</span>
+			<span class="n">file</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"%s/%s"</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">strings</span><span class="o">.</span><span class="n">TrimSpace</span><span class="p">(</span><span class="n">realfile</span><span class="p">))</span>
+			<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+			<span class="n">scpDir</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">prefile</span><span class="p">)</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">])</span> <span class="o">==</span> <span class="s">"C"</span> <span class="p">{</span>
+			<span class="n">scpFile</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">file</span><span class="p">)</span>
+			<span class="c">//scpFile执行完会有一个0的字符</span>
+			<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">1</span><span class="p">])</span>
+			<span class="k">continue</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">])</span> <span class="o">==</span> <span class="s">"E"</span> <span class="p">{</span>
+			<span class="n">scpDir</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">getParentDirectory</span><span class="p">(</span><span class="n">file</span><span class="p">),</span> <span class="n">prefile</span><span class="p">)</span>
+		<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">==</span> <span class="m">0</span> <span class="p">{</span>
+				<span class="n">ex</span> <span class="o">:=</span> <span class="n">exitStatusMsg</span><span class="p">{</span>
+					<span class="n">Status</span><span class="o">:</span> <span class="m">0</span><span class="p">,</span>
+				<span class="p">}</span>
+				<span class="k">if</span> <span class="n">_</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">conn</span><span class="o">.</span><span class="n">SendRequest</span><span class="p">(</span><span class="s">"exit-status"</span><span class="p">,</span> <span class="no">false</span><span class="p">,</span> <span class="n">ssh</span><span class="o">.</span><span class="n">Marshal</span><span class="p">(</span><span class="o">&amp;</span><span class="n">ex</span><span class="p">));</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+					<span class="n">lib</span><span class="o">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"sserver"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"handleExec"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"send status"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"send status fail"</span><span class="p">)</span>
+				<span class="p">}</span>
+				<span class="k">break</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="k">if</span> <span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">==</span> <span class="m">10</span> <span class="p">{</span>
+				<span class="n">scpDir</span><span class="p">(</span><span class="n">conn</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">prefile</span><span class="p">)</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+				<span class="k">var</span> <span class="n">msg</span> <span class="kt">string</span>
+				<span class="n">countm</span> <span class="o">:=</span> <span class="m">1</span>
+				<span class="k">for</span> <span class="p">{</span>
+					<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">countm</span> <span class="o">:</span> <span class="n">countm</span><span class="o">+</span><span class="m">1</span><span class="p">])</span>
+					<span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">countm</span><span class="o">:</span><span class="n">countm</span><span class="o">+</span><span class="m">1</span><span class="p">])</span> <span class="o">==</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span> <span class="p">{</span>
+						<span class="n">msg</span> <span class="o">=</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="n">countm</span><span class="p">])</span>
+						<span class="k">break</span>
+					<span class="p">}</span>
+					<span class="n">countm</span><span class="o">++</span>
+				<span class="p">}</span>
+				<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="n">msg</span><span class="p">))</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="c">//scpDir(conn, file, prefile)</span>
+		<span class="p">}</span>
+		<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+		<span class="k">break</span>
+	<span class="p">}</span>
+
+<span class="p">}</span>
+<span class="k">func</span> <span class="n">scpFile</span><span class="p">(</span><span class="n">conn</span> <span class="n">ssh</span><span class="o">.</span><span class="n">Channel</span><span class="p">,</span> <span class="n">file</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="k">var</span> <span class="n">buf</span> <span class="p">[</span><span class="n">MAX_BUFFER_SIZE</span><span class="p">]</span><span class="kt">byte</span>
+	<span class="k">var</span> <span class="n">has_read_cnt</span> <span class="kt">int</span> <span class="o">=</span> <span class="m">0</span>
+	<span class="k">for</span> <span class="p">{</span>
+		<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">5</span><span class="p">])</span>
+		<span class="k">var</span> <span class="n">filesize</span> <span class="kt">int</span>
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="m">1</span><span class="p">])</span>
+			<span class="k">if</span> <span class="kt">int</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">])</span> <span class="o">&lt;</span> <span class="m">0</span> <span class="p">{</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span> <span class="o">==</span> <span class="sc">' '</span> <span class="p">{</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="n">filesize</span> <span class="o">=</span> <span class="n">filesize</span><span class="o">*</span><span class="m">10</span> <span class="o">+</span> <span class="kt">int</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="p">]</span><span class="o">-</span><span class="sc">'0'</span><span class="p">)</span>
+		<span class="p">}</span>
+		<span class="k">var</span> <span class="n">realfile</span> <span class="kt">string</span>
+		<span class="n">count</span> <span class="o">:=</span> <span class="m">1</span>
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">count</span> <span class="o">:</span> <span class="n">count</span><span class="o">+</span><span class="m">1</span><span class="p">])</span>
+			<span class="k">if</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="n">count</span><span class="o">:</span><span class="n">count</span><span class="o">+</span><span class="m">1</span><span class="p">])</span> <span class="o">==</span> <span class="s">"</span><span class="se">\n</span><span class="s">"</span> <span class="p">{</span>
+				<span class="n">realfile</span> <span class="o">=</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="n">count</span><span class="p">])</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="n">count</span><span class="o">++</span>
+		<span class="p">}</span>
+		<span class="n">isdir</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">tools</span><span class="o">.</span><span class="n">PathExists</span><span class="p">(</span><span class="n">file</span><span class="p">)</span>
+		<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+			<span class="n">lib</span><span class="o">.</span><span class="n">Error</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"handleExec"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"scpFile"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"get dir"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"get dir fail"</span><span class="p">)</span>
+			<span class="k">break</span>
+		<span class="p">}</span>
+		<span class="k">if</span> <span class="o">!</span><span class="n">isdir</span> <span class="p">{</span>
+			<span class="n">err</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">MkdirAll</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="m">0755</span><span class="p">)</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="n">lib</span><span class="o">.</span><span class="n">Error</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"handleExec"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"scpFile"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"mkdir"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"mkdir fail"</span><span class="p">)</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+		<span class="p">}</span>
+		<span class="n">curfile</span> <span class="o">:=</span> <span class="n">fmt</span><span class="o">.</span><span class="n">Sprintf</span><span class="p">(</span><span class="s">"/%s/%s"</span><span class="p">,</span> <span class="n">file</span><span class="p">,</span> <span class="n">strings</span><span class="o">.</span><span class="n">TrimSpace</span><span class="p">(</span><span class="n">realfile</span><span class="p">))</span>
+		<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+
+		<span class="k">for</span> <span class="p">{</span>
+			<span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">filesize</span> <span class="p">{</span>
+				<span class="n">has_read_cnt</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">buf</span><span class="p">)</span>
+			<span class="p">}</span> <span class="k">else</span> <span class="p">{</span>
+				<span class="n">has_read_cnt</span> <span class="o">=</span> <span class="n">filesize</span>
+			<span class="p">}</span>
+			<span class="n">has_read_cnt</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">conn</span><span class="o">.</span><span class="n">Read</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="n">has_read_cnt</span><span class="p">])</span>
+			<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+				<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="n">io</span><span class="o">.</span><span class="n">EOF</span> <span class="p">{</span>
+					<span class="n">lib</span><span class="o">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"sserver"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"writeFile"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"conn.Read"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"conn.Read fail"</span><span class="p">)</span>
+					<span class="k">break</span>
+				<span class="p">}</span>
+				<span class="k">return</span>
+			<span class="p">}</span>
+			<span class="k">if</span> <span class="n">has_read_cnt</span> <span class="o">&lt;</span> <span class="m">0</span> <span class="p">{</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+			<span class="n">writeFile</span><span class="p">(</span><span class="n">curfile</span><span class="p">,</span> <span class="kt">string</span><span class="p">(</span><span class="n">buf</span><span class="p">[</span><span class="m">0</span><span class="o">:</span><span class="n">has_read_cnt</span><span class="p">]))</span>
+			<span class="n">filesize</span> <span class="o">-=</span> <span class="n">has_read_cnt</span>
+			<span class="k">if</span> <span class="n">filesize</span> <span class="o">==</span> <span class="m">0</span> <span class="p">{</span>
+				<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+				<span class="k">break</span>
+			<span class="p">}</span>
+
+		<span class="p">}</span>
+		<span class="n">conn</span><span class="o">.</span><span class="n">Write</span><span class="p">([]</span><span class="kt">byte</span><span class="p">(</span><span class="s">"</span><span class="se">\x00</span><span class="s">"</span><span class="p">))</span>
+		<span class="k">break</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">writeFile</span><span class="p">(</span><span class="n">file</span> <span class="kt">string</span><span class="p">,</span> <span class="n">s_real_req</span> <span class="kt">string</span><span class="p">)</span> <span class="p">{</span>
+	<span class="c">//fout, err := os.Create(file)</span>
+	<span class="n">fout</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">os</span><span class="o">.</span><span class="n">OpenFile</span><span class="p">(</span><span class="n">file</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">O_CREATE</span><span class="o">|</span><span class="n">os</span><span class="o">.</span><span class="n">O_RDWR</span><span class="p">,</span> <span class="m">0755</span><span class="p">)</span>
+	<span class="k">if</span> <span class="n">err</span> <span class="o">!=</span> <span class="no">nil</span> <span class="p">{</span>
+		<span class="n">lib</span><span class="o">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"sserver"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"writeFile"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"OpenFile"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"OpenFile fail"</span><span class="p">)</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+	<span class="k">defer</span> <span class="n">fout</span><span class="o">.</span><span class="n">Close</span><span class="p">()</span>
+
+	<span class="k">var</span> <span class="n">bytes_buf</span> <span class="n">bytes</span><span class="o">.</span><span class="n">Buffer</span>
+	<span class="n">bytes_buf</span><span class="o">.</span><span class="n">WriteString</span><span class="p">(</span><span class="n">s_real_req</span><span class="p">)</span>
+
+	<span class="k">var</span> <span class="n">write_len</span> <span class="kt">int</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">s_real_req</span><span class="p">)</span>
+	<span class="n">cnt</span><span class="p">,</span> <span class="n">err</span> <span class="o">:=</span> <span class="n">fout</span><span class="o">.</span><span class="n">Write</span><span class="p">(</span><span class="n">bytes_buf</span><span class="o">.</span><span class="n">Bytes</span><span class="p">())</span>
+	<span class="k">if</span> <span class="n">cnt</span> <span class="o">!=</span> <span class="n">write_len</span> <span class="p">{</span>
+		<span class="n">lib</span><span class="o">.</span><span class="n">Warn</span><span class="p">(</span><span class="n">logrus</span><span class="o">.</span><span class="n">Fields</span><span class="p">{</span><span class="s">"service"</span><span class="o">:</span> <span class="s">"sserver"</span><span class="p">,</span> <span class="s">"func"</span><span class="o">:</span> <span class="s">"writeFile"</span><span class="p">,</span> <span class="s">"action"</span><span class="o">:</span> <span class="s">"Write"</span><span class="p">,</span> <span class="s">"error"</span><span class="o">:</span> <span class="n">err</span><span class="p">},</span> <span class="s">"Write fail"</span><span class="p">)</span>
+		<span class="k">return</span>
+	<span class="p">}</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">getParentDirectory</span><span class="p">(</span><span class="n">dirctory</span> <span class="kt">string</span><span class="p">)</span> <span class="kt">string</span> <span class="p">{</span>
+	<span class="k">return</span> <span class="n">substr</span><span class="p">(</span><span class="n">dirctory</span><span class="p">,</span> <span class="m">0</span><span class="p">,</span> <span class="n">strings</span><span class="o">.</span><span class="n">LastIndex</span><span class="p">(</span><span class="n">dirctory</span><span class="p">,</span> <span class="s">"/"</span><span class="p">))</span>
+<span class="p">}</span>
+
+<span class="k">func</span> <span class="n">substr</span><span class="p">(</span><span class="n">s</span> <span class="kt">string</span><span class="p">,</span> <span class="n">pos</span><span class="p">,</span> <span class="n">length</span> <span class="kt">int</span><span class="p">)</span> <span class="kt">string</span> <span class="p">{</span>
+	<span class="n">runes</span> <span class="o">:=</span> <span class="p">[]</span><span class="kt">rune</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+	<span class="n">l</span> <span class="o">:=</span> <span class="n">pos</span> <span class="o">+</span> <span class="n">length</span>
+	<span class="k">if</span> <span class="n">l</span> <span class="o">&gt;</span> <span class="nb">len</span><span class="p">(</span><span class="n">runes</span><span class="p">)</span> <span class="p">{</span>
+		<span class="n">l</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">runes</span><span class="p">)</span>
+	<span class="p">}</span>
+	<span class="k">return</span> <span class="kt">string</span><span class="p">(</span><span class="n">runes</span><span class="p">[</span><span class="n">pos</span><span class="o">:</span><span class="n">l</span><span class="p">])</span>
+<span class="p">}</span>
+</code></pre></div></div>
+
+:ET
