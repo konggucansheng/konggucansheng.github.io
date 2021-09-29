@@ -5,9 +5,106 @@
     <description>本站为空谷残声的个人博客，内容为本人Golang学习成长的经历。</description>
     <link>http://localhost:4000/</link>
     <atom:link href="http://localhost:4000/feed.xml" rel="self" type="application/rss+xml"/>
-    <pubDate>Tue, 28 Sep 2021 11:31:43 +0800</pubDate>
-    <lastBuildDate>Tue, 28 Sep 2021 11:31:43 +0800</lastBuildDate>
+    <pubDate>Wed, 29 Sep 2021 14:31:21 +0800</pubDate>
+    <lastBuildDate>Wed, 29 Sep 2021 14:31:21 +0800</lastBuildDate>
     <generator>Jekyll v4.0.1</generator>
+    
+      <item>
+        <title>生产问题分析！delete in子查询不走索引?！</title>
+        <description>&lt;h2 id=&quot;前言&quot;&gt;前言&lt;/h2&gt;
+&lt;p&gt;文章开篇前，先问大家一个问题：delete in子查询，是否会走索引呢？很多伙伴第一感觉就是：会走索引。最近我们出了个生产问题，就跟它有关。本文将跟大家一起探讨这个问题，并附上优化方案。&lt;/p&gt;
+
+&lt;p&gt;&lt;img src=&quot;/assets/images/mysql1.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;问题复现&quot;&gt;问题复现&lt;/h2&gt;
+&lt;p&gt;MySQL版本是5.7，假设当前有两张表account和old_account,表结构如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;CREATE TABLE `old_account` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键Id',
+  `name` varchar(255) DEFAULT NULL COMMENT '账户名',
+  `balance` int(11) DEFAULT NULL COMMENT '余额',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `update_time` datetime NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_name` (`name`) USING BTREE
+) ENGINE=InnoDB AUTO_INCREMENT=1570068 DEFAULT CHARSET=utf8 ROW_FORMAT=REDUNDANT COMMENT='老的账户表';
+
+CREATE TABLE `account` (
+  `id` int(11) NOT NULL AUTO_INCREMENT COMMENT '主键Id',
+  `name` varchar(255) DEFAULT NULL COMMENT '账户名',
+  `balance` int(11) DEFAULT NULL COMMENT '余额',
+  `create_time` datetime NOT NULL COMMENT '创建时间',
+  `update_time` datetime NOT NULL ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+  PRIMARY KEY (`id`),
+  KEY `idx_name` (`name`) USING BTREE
+) ENGINE=InnoDB AUTO_INCREMENT=1570068 DEFAULT CHARSET=utf8 ROW_FORMAT=REDUNDANT COMMENT='账户表';
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;执行的SQL如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;delete from account where name in (select name from old_account);
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;我们explain执行计划走一波，
+&lt;img src=&quot;/assets/images/mysql2.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;br /&gt;
+从explain结果可以发现：先全表扫描 account，然后逐行执行子查询判断条件是否满足；显然，这个执行计划和我们预期不符合，因为并没有走索引。
+但是如果换成把delete换成select，就会走索引。如下：
+&lt;img src=&quot;/assets/images/mysql3.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;br /&gt;
+为什么select in子查询会走索引，delete in子查询却不会走索引呢？
+##原因分析
+select in子查询语句跟delete in子查询语句的不同点到底在哪里呢？
+我们执行以下SQL看看&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;explain select * from account where name in (select name from old_account);
+show WARNINGS;
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;show WARNINGS 可以查看优化后,最终执行的sql&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;结果如下：&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;select `test2`.`account`.`id` AS `id`,`test2`.`account`.`name` AS `name`,`test2`.`account`.`balance` AS `balance`,`test2`.`account`.`create_time` AS `create_time`,`test2`.`account`.`update_time` AS `update_time` from `test2`.`account` 
+semi join (`test2`.`old_account`)
+where (`test2`.`account`.`name` = `test2`.`old_account`.`name`)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;可以发现，实际执行的时候，MySQL对select in子查询做了优化，把子查询改成join的方式，所以可以走索引。但是很遗憾，对于delete in子查询，MySQL却没有对它做这个优化。&lt;br /&gt;
+优化方案
+——–
+那如何优化这个问题呢？通过上面的分析，显然可以把delete in子查询改为join的方式。我们改为join的方式后，再explain看下：
+&lt;img src=&quot;/assets/images/mysql4.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;br /&gt;
+可以发现，改用join的方式是可以走索引的，完美解决了这个问题。
+实际上，对于update或者delete子查询的语句，MySQL官网也是推荐join的方式优化
+&lt;img src=&quot;/assets/images/mysql5.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;br /&gt;
+其实呢，给表加别名，也可以解决这个问题哦，如下:&lt;/p&gt;
+&lt;div class=&quot;highlighter-rouge&quot;&gt;&lt;div class=&quot;highlight&quot;&gt;&lt;pre class=&quot;highlight&quot;&gt;&lt;code&gt;explain delete a from account as a where a.name in (select name from old_account)
+&lt;/code&gt;&lt;/pre&gt;&lt;/div&gt;&lt;/div&gt;
+&lt;p&gt;&lt;img src=&quot;/assets/images/mysql6.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;/p&gt;
+
+&lt;h2 id=&quot;为什么加别个名就可以走索引了呢&quot;&gt;为什么加别个名就可以走索引了呢？&lt;/h2&gt;
+&lt;p&gt;what？为啥加个别名，delete in子查询又行了，又走索引了？
+我们回过头来看看explain的执行计划，可以发现Extra那一栏，有个LooseScan。 
+&lt;img src=&quot;/assets/images/mysql7.png&quot; width=&quot;100%&quot; height=&quot;100%&quot; /&gt;&lt;br /&gt;
+LooseScan是什么呢？ 其实它是一种策略，是semi join子查询的一种执行策略。&lt;/p&gt;
+
+&lt;blockquote&gt;
+  &lt;p&gt;因为子查询改为join，是可以让delete in子查询走索引;而加别名，会走LooseScan策略，而LooseScan策略，本质上就是semi join子查询的一种执行策略。&lt;/p&gt;
+&lt;/blockquote&gt;
+
+&lt;p&gt;因此，加别名就可以让delete in子查询走索引啦！&lt;/p&gt;
+
+&lt;h2 id=&quot;总结&quot;&gt;总结&lt;/h2&gt;
+
+&lt;p&gt;本博文分析了delete in子查询不走索引的原因，并附上解决方案。delete in在日常开发，是非常常见的，平时大家工作中，需要注意一下。同时呢，建议大家工作的时候，写SQL的时候，尽量养成一个好习惯，先用explain分析一下SQL。&lt;/p&gt;
+
+&lt;p&gt;&lt;a href=&quot;https://juejin.cn/post/7013127536972398606?utm_source=gold_browser_extension&quot;&gt;文章来源&lt;/a&gt;&lt;/p&gt;
+
+</description>
+        <pubDate>Wed, 29 Sep 2021 00:00:00 +0800</pubDate>
+        <link>http://localhost:4000/go/2021/09/29/deletein.html</link>
+        <guid isPermaLink="true">http://localhost:4000/go/2021/09/29/deletein.html</guid>
+        
+        <category>mysql</category>
+        
+        
+        <category>Go</category>
+        
+      </item>
     
       <item>
         <title>Mysql bug</title>
