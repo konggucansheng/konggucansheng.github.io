@@ -1,7 +1,7 @@
 ---
 layout: post
 category: Go
-title: go常见的数据问题和高性能变成
+title: go常见的数据问题和高性能编程
 tagline: by 空谷残声
 tags: 
   - mysql
