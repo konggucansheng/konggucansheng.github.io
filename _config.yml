@@ -79,6 +79,11 @@ navs:
     label: Go
     target: _self
 
+  -
+    href: /c.html
+    label: C
+    target: _self
+
   # -
   #   href: /life.html
   #   label: 程序人生
